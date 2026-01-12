@@ -365,7 +365,8 @@ export const blackjackMachine = setup({
       dealerCards.push(result.card)
       shoe = result.shoe
 
-      // Evaluate side bets for each spot
+      // Evaluate side bets for each spot and pay out immediately
+      let sideBetWinnings = 0
       const spotsWithSideBets = spots.map((spot) => {
         if (spot.bet === 0 || spot.hands.length === 0) return spot
 
@@ -379,6 +380,16 @@ export const blackjackMachine = setup({
             spot.sideBets.perfectPairs > 0
               ? evaluatePerfectPairs(playerCards)
               : null,
+        }
+
+        // Pay out winning side bets immediately
+        if (spot.sideBets.twentyOnePlusThree > 0 && sideBetResults.twentyOnePlusThree) {
+          const payout = SIDE_BET_PAYOUTS.twentyOnePlusThree[sideBetResults.twentyOnePlusThree]
+          sideBetWinnings += spot.sideBets.twentyOnePlusThree * payout
+        }
+        if (spot.sideBets.perfectPairs > 0 && sideBetResults.perfectPairs) {
+          const payout = SIDE_BET_PAYOUTS.perfectPairs[sideBetResults.perfectPairs]
+          sideBetWinnings += spot.sideBets.perfectPairs * payout
         }
 
         return {
@@ -408,6 +419,7 @@ export const blackjackMachine = setup({
         activeSpotIndex: firstActiveSpot,
         message: `Spot ${firstActiveSpot + 1} - Your turn`,
         previousBets,
+        bankroll: context.bankroll + sideBetWinnings,
       }
     }),
     takeInsurance: assign(({ context }) => {
@@ -614,7 +626,6 @@ export const blackjackMachine = setup({
       const dealerBlackjack = isBlackjack(context.dealerHand)
 
       let bankroll = context.bankroll
-      const sideBetMessages: string[] = []
       let spotWins = 0
       let spotLosses = 0
 
@@ -627,20 +638,6 @@ export const blackjackMachine = setup({
 
       const settledSpots = context.spots.map((spot) => {
         if (spot.bet === 0) return spot
-
-        // Handle side bets for this spot
-        if (spot.sideBets.twentyOnePlusThree > 0 && spot.sideBetResults.twentyOnePlusThree) {
-          const payout =
-            SIDE_BET_PAYOUTS.twentyOnePlusThree[spot.sideBetResults.twentyOnePlusThree]
-          bankroll += spot.sideBets.twentyOnePlusThree * payout
-          sideBetMessages.push(`Spot ${spot.id + 1}: 21+3 wins!`)
-        }
-
-        if (spot.sideBets.perfectPairs > 0 && spot.sideBetResults.perfectPairs) {
-          const payout = SIDE_BET_PAYOUTS.perfectPairs[spot.sideBetResults.perfectPairs]
-          bankroll += spot.sideBets.perfectPairs * payout
-          sideBetMessages.push(`Spot ${spot.id + 1}: Perfect Pairs wins!`)
-        }
 
         // Settle hands
         const settledHands = spot.hands.map((hand): Hand => {
@@ -692,10 +689,6 @@ export const blackjackMachine = setup({
       else if (spotLosses > 0 && spotWins === 0) message = 'Dealer wins'
       else if (spotWins > 0 && spotLosses > 0) message = 'Mixed results'
       else message = 'Push'
-
-      if (sideBetMessages.length > 0) {
-        message += ' ' + sideBetMessages.join(' ')
-      }
 
       return {
         spots: settledSpots,

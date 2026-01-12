@@ -103,20 +103,10 @@ export function TableLayout({
   return (
     <div className="relative w-full">
       {/* Table felt background */}
-      <div className="relative bg-gradient-to-b from-emerald-700 to-emerald-800 rounded-t-[200px] border-8 border-amber-900 shadow-2xl overflow-hidden min-h-[500px]">
-
-        {/* Table markings */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-8 left-1/2 -translate-x-1/2 text-white/40 text-sm tracking-widest uppercase">
-            Dealer must stand on all 17
-          </div>
-          <div className="absolute top-14 left-1/2 -translate-x-1/2 text-white/40 text-xs tracking-wider">
-            Insurance pays 2 to 1
-          </div>
-        </div>
+      <div className="relative bg-linear-to-b from-emerald-700 to-emerald-800 rounded-t-[200px] border-8 border-amber-900 shadow-2xl overflow-hidden min-h-125">
 
         {/* Dealer area */}
-        <div className="pt-24 pb-8 flex flex-col items-center">
+        <div className="pt-4 pb-4 flex flex-col items-center">
           {dealerHand.length > 0 ? (
             <Hand
               cards={dealerHand}
@@ -130,8 +120,16 @@ export function TableLayout({
           )}
         </div>
 
+        {/* Table rule text */}
+        <div className="text-center text-white/40 text-sm tracking-widest uppercase py-2">
+          Dealer must stand on all 17
+        </div>
+        <div className="text-center text-white/40 text-xs tracking-wider">
+          Insurance pays 2 to 1
+        </div>
+
         {/* Player hands area - shown above betting spots when cards are dealt (reversed to match spots) */}
-        <div className="min-h-[120px] flex justify-center items-end gap-4 pb-4">
+        <div className="min-h-30 flex justify-center items-end gap-4 pb-4">
           {[...spots].reverse().map((spot) => {
             if (spot.bet === 0 || spot.hands.length === 0) return null
 
