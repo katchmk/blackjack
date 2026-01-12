@@ -11,6 +11,7 @@ interface TableLayoutProps {
   isPlaying: boolean
   isBetting: boolean
   isSettlement: boolean
+  isEvenMoney: boolean
   isInsurance: boolean
   isPlayerTurn: boolean
   isDealerTurn: boolean
@@ -22,6 +23,9 @@ interface TableLayoutProps {
   canRebet: boolean
   previousBetsTotal: number
   message: string
+  // Even Money
+  onTakeEvenMoney: () => void
+  onDeclineEvenMoney: () => void
   // Insurance
   insuranceCost: number
   canAffordInsurance: boolean
@@ -60,6 +64,7 @@ export function TableLayout({
   isPlaying,
   isBetting,
   isSettlement,
+  isEvenMoney,
   isInsurance,
   isPlayerTurn,
   isDealerTurn,
@@ -71,6 +76,8 @@ export function TableLayout({
   canRebet,
   previousBetsTotal,
   message,
+  onTakeEvenMoney,
+  onDeclineEvenMoney,
   insuranceCost,
   canAffordInsurance,
   onTakeInsurance,
@@ -326,6 +333,28 @@ export function TableLayout({
                 </>
               )}
             </>
+          )}
+
+          {/* Even money controls */}
+          {isEvenMoney && (
+            <div className="text-center animate-state-enter">
+              <p className="text-lg mb-2">You have Blackjack! Take even money?</p>
+              <p className="text-yellow-400 mb-4">Guarantees 1:1 payout instead of risking a push</p>
+              <div className="flex gap-4 justify-center">
+                <button
+                  className="px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-gradient-to-br from-green-400 to-emerald-500 text-slate-900 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-green-400/40"
+                  onClick={onTakeEvenMoney}
+                >
+                  Take Even Money
+                </button>
+                <button
+                  className="px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-white/20 text-white hover:bg-white/30"
+                  onClick={onDeclineEvenMoney}
+                >
+                  No, Risk It
+                </button>
+              </div>
+            </div>
           )}
 
           {/* Insurance controls */}

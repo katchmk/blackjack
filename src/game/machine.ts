@@ -24,6 +24,8 @@ type GameEvent =
   | { type: 'ADD_SIDE_BET'; betType: SideBetType; amount: number }
   | { type: 'REBET' }
   | { type: 'DEAL' }
+  | { type: 'TAKE_EVEN_MONEY' }
+  | { type: 'DECLINE_EVEN_MONEY' }
   | { type: 'TAKE_INSURANCE' }
   | { type: 'DECLINE_INSURANCE' }
   | { type: 'HIT' }
@@ -145,11 +147,18 @@ function currentSpotSettled(context: GameContext): boolean {
   return spot.hands.every((h) => h.isSettled || isBust(h.cards) || isBlackjack(h.cards))
 }
 
-function allHandsBusted(spots: Spot[]): boolean {
+function noActivePlayerHands(spots: Spot[]): boolean {
   const activeSpots = getActiveSpots(spots)
   if (activeSpots.length === 0) return false
+  // Check if all hands are busted, surrendered, or blackjack (no need for dealer to draw)
   return activeSpots.every((spot) =>
-    spot.hands.every((h) => isBust(h.cards))
+    spot.hands.every((h) => isBust(h.cards) || h.result === 'surrender' || isBlackjack(h.cards))
+  )
+}
+
+function anyPlayerHasBlackjack(spots: Spot[]): boolean {
+  return getActiveSpots(spots).some((spot) =>
+    spot.hands.some((h) => isBlackjack(h.cards) && !h.isSettled)
   )
 }
 
@@ -184,7 +193,7 @@ export const blackjackMachine = setup({
       return (
         hand !== undefined &&
         canDoubleDown(hand.cards) &&
-        !hand.isSplit &&
+        !hand.isSplitAces &&
         context.bankroll >= hand.bet
       )
     },
@@ -233,8 +242,11 @@ export const blackjackMachine = setup({
       const value = calculateFullHandValue(context.dealerHand)
       return value < 17
     },
-    allHandsBusted: ({ context }) => {
-      return allHandsBusted(context.spots)
+    noActivePlayerHands: ({ context }) => {
+      return noActivePlayerHands(context.spots)
+    },
+    anyPlayerHasBlackjack: ({ context }) => {
+      return anyPlayerHasBlackjack(context.spots)
     },
     canRebet: ({ context }) => {
       if (!context.previousBets) return false
@@ -403,6 +415,33 @@ export const blackjackMachine = setup({
       return {
         insuranceBet: totalBets / 2,
         bankroll: context.bankroll - totalBets / 2,
+      }
+    }),
+    takeEvenMoney: assign(({ context }) => {
+      let bankroll = context.bankroll
+      const spots = context.spots.map((spot) => {
+        if (spot.bet === 0 || spot.hands.length === 0) return spot
+
+        const hands = spot.hands.map((hand): Hand => {
+          // Only apply to blackjack hands that aren't settled
+          if (!isBlackjack(hand.cards) || hand.isSettled) return hand
+
+          // Pay 1:1 (return bet + 1x bet = 2x bet)
+          bankroll += hand.bet * 2
+          return {
+            ...hand,
+            isSettled: true,
+            result: 'win', // Even money is a 1:1 win
+          }
+        })
+
+        return { ...spot, hands }
+      })
+
+      return {
+        spots,
+        bankroll,
+        message: 'Even money taken',
       }
     }),
     hit: assign(({ context }) => {
@@ -706,12 +745,42 @@ export const blackjackMachine = setup({
     dealing: {
       entry: 'dealInitialCards',
       always: [
+        // If dealer shows ace and player has blackjack, offer even money first
+        {
+          guard: ({ context }) =>
+            context.dealerHand[0]?.rank === 'A' && anyPlayerHasBlackjack(context.spots),
+          target: 'evenMoney',
+        },
         {
           guard: 'dealerShowsAce',
           target: 'insurance',
         },
         {
           target: 'playerTurn',
+        },
+      ],
+    },
+    evenMoney: {
+      on: {
+        TAKE_EVEN_MONEY: {
+          actions: 'takeEvenMoney',
+          target: 'afterEvenMoney',
+        },
+        DECLINE_EVEN_MONEY: {
+          target: 'insurance',
+        },
+      },
+    },
+    afterEvenMoney: {
+      always: [
+        // If all spots are now settled, skip insurance
+        {
+          guard: 'allSpotsSettled',
+          target: 'checkBlackjacks',
+        },
+        // Otherwise, offer insurance for remaining hands
+        {
+          target: 'insurance',
         },
       ],
     },
@@ -912,9 +981,9 @@ export const blackjackMachine = setup({
     dealerTurn: {
       entry: 'revealDealerCard',
       always: [
-        // If all player hands busted, skip dealer drawing
+        // If no active player hands (all busted or surrendered), skip dealer drawing
         {
-          guard: 'allHandsBusted',
+          guard: 'noActivePlayerHands',
           target: 'settlement',
         },
         {

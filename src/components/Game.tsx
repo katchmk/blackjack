@@ -13,17 +13,18 @@ export function Game() {
 
   const isBetting = state.matches('betting')
   const isPlayerTurn = state.matches('playerTurn')
+  const isEvenMoney = state.matches('evenMoney')
   const isInsurance = state.matches('insurance')
   const isSettlement = state.matches('settlement')
   const isDealerTurn = state.matches('dealerTurn')
-  const isPlaying = isPlayerTurn || isDealerTurn || isInsurance
+  const isPlaying = isPlayerTurn || isDealerTurn || isInsurance || isEvenMoney
 
   // Get current spot and hand for player actions
   const currentSpot = context.spots[context.activeSpotIndex]
   const currentHand = currentSpot?.hands[currentSpot.activeHandIndex]
 
-  const canHitNow = isPlayerTurn && currentHand && !isBust(currentHand.cards) && calculateHandValue(currentHand.cards) < 21
-  const canDoubleNow = isPlayerTurn && currentHand && canDoubleDown(currentHand.cards) && !currentHand.isSplit && context.bankroll >= currentHand.bet
+  const canHitNow = isPlayerTurn && currentHand && !currentHand.isSplitAces && !isBust(currentHand.cards) && calculateHandValue(currentHand.cards) < 21
+  const canDoubleNow = isPlayerTurn && currentHand && canDoubleDown(currentHand.cards) && !currentHand.isSplitAces && context.bankroll >= currentHand.bet
   const canSplitNow = isPlayerTurn && currentHand && canSplit(currentHand.cards) && currentSpot.hands.length < 4 && context.bankroll >= currentHand.bet
   const canSurrenderNow = isPlayerTurn && currentHand && currentHand.cards.length === 2 && !currentHand.isSplit && currentSpot.activeHandIndex === 0
 
@@ -72,6 +73,7 @@ export function Game() {
         isPlaying={isPlaying}
         isBetting={isBetting}
         isSettlement={isSettlement}
+        isEvenMoney={isEvenMoney}
         isInsurance={isInsurance}
         isPlayerTurn={isPlayerTurn}
         isDealerTurn={isDealerTurn}
@@ -83,6 +85,8 @@ export function Game() {
         canRebet={!!canRebet}
         previousBetsTotal={previousBetsTotal}
         message={context.message}
+        onTakeEvenMoney={() => send({ type: 'TAKE_EVEN_MONEY' })}
+        onDeclineEvenMoney={() => send({ type: 'DECLINE_EVEN_MONEY' })}
         insuranceCost={insuranceCost}
         canAffordInsurance={canAffordInsurance}
         onTakeInsurance={() => send({ type: 'TAKE_INSURANCE' })}

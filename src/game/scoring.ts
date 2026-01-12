@@ -159,11 +159,7 @@ function isStraight3Cards(cards: Card[]): boolean {
   }
 
   // Check for A-2-3 (Ace low): values would be [2, 3, 14]
-  if (values[0] === 2 && values[1] === 3 && values[2] === 14) {
-    return true
-  }
-
-  return false
+  return values[0] === 2 && values[1] === 3 && values[2] === 14;
 }
 
 // Check if all 3 cards have the same suit
