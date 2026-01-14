@@ -1,75 +1,61 @@
-# React + TypeScript + Vite
+# Free Blackjack Game
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A free, browser-based blackjack game with realistic gameplay. No download or registration required.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Classic Blackjack** - Hit, Stand, Double Down, Split, Surrender
+- **Side Bets** - 21+3 and Perfect Pairs with full payout tables
+- **Insurance & Even Money** - Full insurance options when dealer shows an Ace
+- **Multi-Spot Play** - Play up to 7 spots simultaneously
+- **Triple 7s Bonus** - Bonus payout for hitting three 7s
+- **Realistic UI** - Card animations, chip stacks, and win/loss indicators
 
-## React Compiler
+## Side Bet Payouts
 
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
+### 21+3
+| Hand | Payout |
+|------|--------|
+| Suited Triple | 100:1 |
+| Straight Flush | 40:1 |
+| Three of a Kind | 30:1 |
+| Straight | 10:1 |
+| Flush | 5:1 |
 
-Note: This will impact Vite dev & build performances.
+### Perfect Pairs
+| Hand | Payout |
+|------|--------|
+| Perfect Pair | 25:1 |
+| Colored Pair | 12:1 |
+| Mixed Pair | 6:1 |
 
-## Expanding the ESLint configuration
+## Tech Stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- **React 19** with React Compiler
+- **TypeScript** with strict mode
+- **XState** for state machine management
+- **Vite** for development and building
+- **Tailwind CSS** for styling
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Development
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+```bash
+# Install dependencies
+pnpm install
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# Start development server
+pnpm dev
+
+# Build for production
+pnpm build
+
+# Preview production build
+pnpm preview
+
+# Run linting
+pnpm lint
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## License
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+MIT
