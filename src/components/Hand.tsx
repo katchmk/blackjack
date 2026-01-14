@@ -65,7 +65,7 @@ export function Hand({ hand, cards, isActive, label, hideValue, compact }: HandP
 
   return (
     <div className={twMerge(
-      'flex flex-col items-center gap-1 rounded-xl transition-all duration-300',
+      'flex flex-col items-center gap-4 rounded-xl transition-all duration-300',
       compact ? 'p-1' : 'p-2.5',
       isActive && 'bg-yellow-400/20 shadow-[0_0_20px_rgba(250,204,21,0.3)]'
     )}>

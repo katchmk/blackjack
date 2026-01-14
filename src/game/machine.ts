@@ -19,6 +19,7 @@ type SideBetType = keyof SideBets
 type GameEvent =
   | { type: 'SELECT_SPOT'; spotIndex: number }
   | { type: 'ADD_BET'; amount: number }
+  | { type: 'DOUBLE_BET' }
   | { type: 'CLEAR_BET' }
   | { type: 'CLEAR_ALL_BETS' }
   | { type: 'ADD_SIDE_BET'; betType: SideBetType; amount: number }
@@ -75,6 +76,8 @@ function createInitialContext(): GameContext {
     insuranceBet: 0,
     message: 'Select a spot and place your bet',
     previousBets: null,
+    lastWin: 0,
+    lastWinAmount: 0,
   }
 }
 
@@ -159,6 +162,13 @@ function noActivePlayerHands(spots: Spot[]): boolean {
 function anyPlayerHasBlackjack(spots: Spot[]): boolean {
   return getActiveSpots(spots).some((spot) =>
     spot.hands.some((h) => isBlackjack(h.cards) && !h.isSettled)
+  )
+}
+
+function allActiveSpotsHaveBlackjack(spots: Spot[]): boolean {
+  const activeSpots = getActiveSpots(spots)
+  return activeSpots.length > 0 && activeSpots.every((spot) =>
+    spot.hands.every((h) => isBlackjack(h.cards))
   )
 }
 
@@ -248,6 +258,9 @@ export const blackjackMachine = setup({
     anyPlayerHasBlackjack: ({ context }) => {
       return anyPlayerHasBlackjack(context.spots)
     },
+    allActiveSpotsHaveBlackjack: ({ context }) => {
+      return allActiveSpotsHaveBlackjack(context.spots)
+    },
     canRebet: ({ context }) => {
       if (!context.previousBets) return false
       const totalNeeded = getTotalBetAmount(context.previousBets)
@@ -266,6 +279,18 @@ export const blackjackMachine = setup({
       return {
         spots,
         bankroll: context.bankroll - params.amount,
+      }
+    }),
+    doubleBet: assign(({ context }) => {
+      const spots = [...context.spots]
+      const spot = { ...spots[context.bettingSpotIndex] }
+      const currentBet = spot.bet
+      if (currentBet === 0 || context.bankroll < currentBet) return {}
+      spot.bet = currentBet * 2
+      spots[context.bettingSpotIndex] = spot
+      return {
+        spots,
+        bankroll: context.bankroll - currentBet,
       }
     }),
     clearBet: assign(({ context }) => {
@@ -641,7 +666,17 @@ export const blackjackMachine = setup({
 
         // Settle hands
         const settledHands = spot.hands.map((hand): Hand => {
-          if (hand.isSettled) return hand
+          // Handle already-settled hands (bust during play, surrender, even money)
+          if (hand.isSettled) {
+            if (hand.result === 'lose') {
+              spotLosses++
+            } else if (hand.result === 'win' || hand.result === 'blackjack') {
+              spotWins++
+            } else if (hand.result === 'surrender') {
+              spotLosses++
+            }
+            return hand
+          }
 
           const playerValue = calculateFullHandValue(hand.cards)
           const playerBlackjack = isBlackjack(hand.cards) && !hand.isSplit
@@ -684,6 +719,71 @@ export const blackjackMachine = setup({
         return { ...spot, hands: settledHands }
       })
 
+      // Calculate lastWin (P/L) and lastWinAmount (total returned from wins)
+      let lastWin = 0
+      let lastWinAmount = 0
+
+      // Insurance result
+      if (context.insuranceBet > 0) {
+        if (dealerBlackjack) {
+          lastWin += context.insuranceBet * 2 // Won 2:1 on insurance
+          lastWinAmount += context.insuranceBet * 3 // Original + 2:1 payout
+        } else {
+          lastWin -= context.insuranceBet // Lost insurance bet
+        }
+      }
+
+      // Main bets and side bets
+      for (const spot of settledSpots) {
+        if (spot.bet === 0) continue
+
+        // Main bet results
+        for (const hand of spot.hands) {
+          if (!hand.result) continue
+          switch (hand.result) {
+            case 'blackjack':
+              lastWin += hand.bet * 1.5
+              lastWinAmount += hand.bet * 2.5 // Original + 1.5:1 payout
+              break
+            case 'win':
+              lastWin += hand.bet
+              lastWinAmount += hand.bet * 2 // Original + 1:1 payout
+              break
+            case 'lose':
+              lastWin -= hand.bet
+              // No winAmount for losses
+              break
+            case 'surrender':
+              lastWin -= hand.bet / 2
+              lastWinAmount += hand.bet / 2 // Half bet returned
+              break
+            case 'push':
+              lastWinAmount += hand.bet // Original returned
+              break
+          }
+        }
+
+        // Side bet results (already paid out during deal)
+        if (spot.sideBets.twentyOnePlusThree > 0) {
+          if (spot.sideBetResults.twentyOnePlusThree) {
+            const payout = SIDE_BET_PAYOUTS.twentyOnePlusThree[spot.sideBetResults.twentyOnePlusThree]
+            lastWin += spot.sideBets.twentyOnePlusThree * (payout - 1) // Profit only
+            lastWinAmount += spot.sideBets.twentyOnePlusThree * payout // Full payout
+          } else {
+            lastWin -= spot.sideBets.twentyOnePlusThree // Lost side bet
+          }
+        }
+        if (spot.sideBets.perfectPairs > 0) {
+          if (spot.sideBetResults.perfectPairs) {
+            const payout = SIDE_BET_PAYOUTS.perfectPairs[spot.sideBetResults.perfectPairs]
+            lastWin += spot.sideBets.perfectPairs * (payout - 1) // Profit only
+            lastWinAmount += spot.sideBets.perfectPairs * payout // Full payout
+          } else {
+            lastWin -= spot.sideBets.perfectPairs // Lost side bet
+          }
+        }
+      }
+
       let message = ''
       if (spotWins > 0 && spotLosses === 0) message = 'You win!'
       else if (spotLosses > 0 && spotWins === 0) message = 'Dealer wins'
@@ -695,6 +795,8 @@ export const blackjackMachine = setup({
         bankroll,
         insuranceBet: 0,
         message,
+        lastWin,
+        lastWinAmount,
       }
     }),
   },
@@ -711,6 +813,9 @@ export const blackjackMachine = setup({
         ADD_BET: {
           guard: { type: 'canAffordBet', params: ({ event }) => ({ amount: event.amount }) },
           actions: { type: 'addBet', params: ({ event }) => ({ amount: event.amount }) },
+        },
+        DOUBLE_BET: {
+          actions: 'doubleBet',
         },
         CLEAR_BET: {
           actions: 'clearBet',
@@ -759,9 +864,17 @@ export const blackjackMachine = setup({
           actions: 'takeEvenMoney',
           target: 'afterEvenMoney',
         },
-        DECLINE_EVEN_MONEY: {
-          target: 'insurance',
-        },
+        DECLINE_EVEN_MONEY: [
+          // If all spots have blackjack, skip insurance (no point insuring a blackjack)
+          {
+            guard: 'allActiveSpotsHaveBlackjack',
+            target: 'checkBlackjacks',
+          },
+          // Otherwise, offer insurance for non-blackjack hands
+          {
+            target: 'insurance',
+          },
+        ],
       },
     },
     afterEvenMoney: {

@@ -18,16 +18,18 @@ interface TableLayoutProps {
   showDealerValue: boolean
   selectedChip: ChipValue
   bankroll: number
+  lastWin: number
+  lastWinAmount: number
   totalBets: number
   canDeal: boolean
   canRebet: boolean
   previousBetsTotal: number
-  message: string
   // Even Money
   onTakeEvenMoney: () => void
   onDeclineEvenMoney: () => void
   // Insurance
   insuranceCost: number
+  insuranceBet: number
   canAffordInsurance: boolean
   onTakeInsurance: () => void
   onDeclineInsurance: () => void
@@ -37,7 +39,10 @@ interface TableLayoutProps {
   canDouble: boolean
   canSplit: boolean
   canSurrender: boolean
+  showHitConfirm: boolean
   onHit: () => void
+  onConfirmHit: () => void
+  onCancelHit: () => void
   onStand: () => void
   onDouble: () => void
   onSplit: () => void
@@ -45,6 +50,8 @@ interface TableLayoutProps {
   // Betting
   onSelectChip: (chip: ChipValue) => void
   onPlaceBet: (spotIndex: number, betType: 'main' | keyof SideBets) => void
+  canDoubleBet: boolean
+  onDoubleBet: () => void
   onClear: () => void
   onRebet: () => void
   onDeal: () => void
@@ -55,6 +62,7 @@ const chipColors: Record<ChipValue, { bg: string; border: string }> = {
   25: { bg: 'from-green-500 to-green-700', border: 'border-green-400' },
   100: { bg: 'from-blue-500 to-blue-700', border: 'border-blue-400' },
   500: { bg: 'from-purple-500 to-purple-700', border: 'border-purple-400' },
+  1000: { bg: 'from-orange-500 to-orange-700', border: 'border-orange-400' },
 }
 
 export function TableLayout({
@@ -71,14 +79,16 @@ export function TableLayout({
   showDealerValue,
   selectedChip,
   bankroll,
+  lastWin,
+  lastWinAmount,
   totalBets,
   canDeal,
   canRebet,
   previousBetsTotal,
-  message,
   onTakeEvenMoney,
   onDeclineEvenMoney,
   insuranceCost,
+  insuranceBet,
   canAffordInsurance,
   onTakeInsurance,
   onDeclineInsurance,
@@ -87,13 +97,18 @@ export function TableLayout({
   canDouble,
   canSplit,
   canSurrender,
+  showHitConfirm,
   onHit,
+  onConfirmHit,
+  onCancelHit,
   onStand,
   onDouble,
   onSplit,
   onSurrender,
   onSelectChip,
   onPlaceBet,
+  canDoubleBet,
+  onDoubleBet,
   onClear,
   onRebet,
   onDeal,
@@ -103,7 +118,29 @@ export function TableLayout({
   return (
     <div className="relative w-full">
       {/* Table felt background */}
-      <div className="relative bg-linear-to-b from-emerald-700 to-emerald-800 rounded-t-[200px] border-8 border-amber-900 shadow-2xl overflow-hidden min-h-125">
+      <div
+        className={twMerge(
+          'flex flex-col',
+          'relative bg-linear-to-b from-emerald-700 to-emerald-800 rounded-t-[200px]',
+          'border-8 border-amber-900 shadow-2xl overflow-hidden min-h-125',
+        )}
+      >
+
+        {/* Side bet payouts legend */}
+        <div className="absolute top-8 left-24 text-[10px] text-white/70 bg-black/20 rounded-lg p-2 z-10">
+          <div className="font-bold text-white/90 mb-1">21+3 Payouts</div>
+          <div>Suited Triple: 100:1</div>
+          <div>Straight Flush: 40:1</div>
+          <div>Three of a Kind: 30:1</div>
+          <div>Straight: 10:1</div>
+          <div>Flush: 5:1</div>
+          <div className="font-bold text-white/90 mt-2 mb-1">Perfect Pairs</div>
+          <div>Perfect Pair: 25:1</div>
+          <div>Colored Pair: 12:1</div>
+          <div>Mixed Pair: 6:1</div>
+          <div className="font-bold text-white/90 mt-2 mb-1">Bonus</div>
+          <div>Triple 7s: 1:1</div>
+        </div>
 
         {/* Dealer area */}
         <div className="pt-4 pb-4 flex flex-col items-center">
@@ -128,41 +165,50 @@ export function TableLayout({
           Insurance pays 2 to 1
         </div>
 
-        {/* Player hands area - shown above betting spots when cards are dealt (reversed to match spots) */}
-        <div className="min-h-30 flex justify-center items-end gap-4 pb-4">
+        {/* Player hands area - always visible to prevent layout jump */}
+        <div className="h-44 flex justify-center items-end gap-4 my-6">
           {[...spots].reverse().map((spot) => {
-            if (spot.bet === 0 || spot.hands.length === 0) return null
-
             const index = spot.id
             const isActiveSpot = isPlaying && index === activeSpotIndex
+            const hasHands = spot.bet > 0 && spot.hands.length > 0
 
             return (
               <div
                 key={spot.id}
-                className={twMerge('flex flex-col items-center transition-all', isActiveSpot && 'scale-105')}
+                className={twMerge(
+                  'flex flex-col items-center justify-end transition-all h-full',
+                  isActiveSpot && 'scale-105'
+                )}
+                style={{ minWidth: '120px' }}
               >
-                {spot.hands.map((hand, handIndex) => {
-                  const isActiveHand = isActiveSpot && handIndex === spot.activeHandIndex
-                  return (
-                    <div key={handIndex} className={twMerge(isActiveHand && 'ring-2 ring-yellow-400 rounded-xl p-1')}>
-                      <Hand
-                        hand={hand}
-                        isActive={isActiveHand}
-                        label={spot.hands.length > 1 ? `Hand ${handIndex + 1}` : undefined}
-                        compact
-                      />
+                {hasHands && (
+                  <div className="flex flex-col items-center">
+                    <div className={twMerge('flex gap-2', spot.hands.length > 1 && 'flex-row')}>
+                      {spot.hands.map((hand, handIndex) => {
+                        const isActiveHand = isActiveSpot && handIndex === spot.activeHandIndex
+                        return (
+                          <div key={handIndex} className={twMerge(isActiveHand && 'ring-2 ring-yellow-400 rounded-xl p-1')}>
+                            <Hand
+                              hand={hand}
+                              isActive={isActiveHand}
+                              label={spot.hands.length > 1 ? `H${handIndex + 1}` : undefined}
+                              compact
+                            />
+                          </div>
+                        )
+                      })}
                     </div>
-                  )
-                })}
-                <div className="text-xs text-white/60 mt-1">Spot {index + 1}</div>
+                    <div className="text-xs text-white/60 mt-1">Spot {index + 1}</div>
+                  </div>
+                )}
               </div>
             )
           })}
         </div>
 
         {/* Betting spots - straight line at bottom */}
-        <div className="relative h-48 mb-12">
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex items-end justify-center gap-3">
+        <div className="relative mb-8">
+          <div className="flex items-end justify-center gap-4">
             {[...spots].reverse().map((spot) => {
               const index = spot.id
               const isActive = isPlaying && index === activeSpotIndex && spot.bet > 0
@@ -172,6 +218,7 @@ export function TableLayout({
                 <div
                   key={spot.id}
                   className="flex flex-col items-center"
+                  style={{ minWidth: '120px' }}
                 >
                   {/* Side bet circles - only clickable if main bet exists */}
                   <div className="flex gap-2 mb-2">
@@ -221,9 +268,15 @@ export function TableLayout({
                           <span className="absolute -top-6 text-xs text-white/50">{index + 1}</span>
 
                           {hasBet ? (
-                            <ChipStack amount={spot.bet} />
+                            <ChipStack amount={spot.hands.length > 0 ? spot.hands.reduce((sum, h) => sum + h.bet, 0) : spot.bet} />
                           ) : (
                             <span className="text-white/40 text-xs">BET</span>
+                          )}
+                          {/* Doubled indicator */}
+                          {spot.hands.some(h => h.isDoubled) && (
+                            <span className="absolute -right-2 -top-2 bg-yellow-500 text-black text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-lg">
+                              2x
+                            </span>
                           )}
                         </button>
                         {/* Win/Loss amount display */}
@@ -242,71 +295,80 @@ export function TableLayout({
               )
             })}
           </div>
+
+          {/* Insurance indicator */}
+          {insuranceBet > 0 && (
+            <div className="flex justify-center mt-3">
+              <span className="bg-amber-500 text-black text-xs font-bold px-3 py-1 rounded-full shadow-lg">
+                INSURED ${insuranceBet}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Controls area at bottom of table */}
         <div className="bg-black/30 py-4">
-          {/* Bankroll and total bet display */}
-          <div className="flex justify-start gap-4 px-4 mb-3 text-sm">
-            <span className="text-green-400 font-semibold">Bankroll: ${bankroll}</span>
-            {totalBets > 0 && (
-              <span className="text-yellow-400 font-semibold">Total Bets: ${totalBets}</span>
-            )}
-          </div>
-
-          {/* Message display */}
-          <div
-            key={message}
-            className="text-center text-xl font-bold text-yellow-400 drop-shadow mb-4 min-h-[28px] animate-slide-up"
-          >
-            {message}
-          </div>
-
-          {/* Total round win display during settlement */}
-          {isSettlement && (() => {
-            const totalWin = calculateTotalRoundWin(spots)
-            if (totalWin === 0) return null
-            return (
-              <div className={twMerge(
-                'text-center text-2xl font-bold mb-4 animate-pop',
-                totalWin > 0 ? 'text-green-400' : 'text-red-400'
-              )}>
-                {totalWin > 0 ? '+' : ''}${totalWin}
-              </div>
-            )
-          })()}
-
           {/* Betting controls */}
           {(isBetting || isSettlement) && (
-            <>
-              {/* Clear / Rebet / Deal buttons */}
-              <div className="flex justify-center gap-3 mb-4">
-                <button
-                  className="px-5 py-2.5 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-white/20 text-white hover:bg-white/30 disabled:opacity-40 disabled:cursor-not-allowed"
-                  onClick={onClear}
-                  disabled={isSettlement ? false : totalBets === 0}
-                >
-                  Clear
-                </button>
-                <button
-                  className="px-5 py-2.5 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
-                  onClick={onRebet}
-                  disabled={!canRebet}
-                >
-                  Rebet {previousBetsTotal > 0 && <span className="text-blue-200">${previousBetsTotal}</span>}
-                </button>
-                <button
-                  className="px-8 py-2.5 text-lg font-bold border-none rounded-lg cursor-pointer transition-all bg-gradient-to-br from-yellow-400 to-amber-500 text-slate-900 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-yellow-400/40 disabled:opacity-40 disabled:cursor-not-allowed disabled:translate-y-0"
-                  onClick={onDeal}
-                  disabled={isSettlement ? !canRebet : !canDeal}
-                >
-                  Deal
-                </button>
+            <div className="flex items-center justify-center gap-8">
+              {/* Bankroll stats on left */}
+              <div className="grid grid-cols-[auto_auto] gap-x-3 gap-y-1 text-sm font-semibold">
+                {totalBets > 0 && (
+                  <>
+                    <span className="text-yellow-400 text-left">Total Bets:</span>
+                    <span className="text-yellow-400 text-right">${totalBets}</span>
+                  </>
+                )}
+                {lastWinAmount > 0 && (
+                  <>
+                    <span className="text-yellow-400 text-left">Last Win:</span>
+                    <span className="text-yellow-400 text-right">${lastWinAmount}</span>
+                  </>
+                )}
+                <span className={twMerge('text-left', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>P/L:</span>
+                <span className={twMerge('text-right', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>{lastWin > 0 ? '+' : ''}${lastWin}</span>
+                <span className="text-green-400 text-left">Bankroll:</span>
+                <span className="text-green-400 text-right">${bankroll}</span>
               </div>
 
-              {/* Chip selector - only during betting */}
-              {isBetting && (
-                <>
+              {/* Betting buttons and chips */}
+              <div className="flex flex-col items-center gap-4">
+                {/* Clear / Rebet / Deal buttons */}
+                <div className="flex justify-center gap-3">
+                  <button
+                    className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-white/20 text-white hover:bg-white/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                    onClick={onClear}
+                    disabled={isSettlement ? false : totalBets === 0}
+                  >
+                    Clear
+                  </button>
+                  {isBetting && (
+                    <button
+                      className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-yellow-600 text-white hover:bg-yellow-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                      onClick={onDoubleBet}
+                      disabled={!canDoubleBet}
+                    >
+                      2x
+                    </button>
+                  )}
+                  <button
+                    className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                    onClick={onRebet}
+                    disabled={!canRebet}
+                  >
+                    Rebet {previousBetsTotal > 0 && <span className="text-blue-200">${previousBetsTotal}</span>}
+                  </button>
+                  <button
+                    className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-gradient-to-br from-yellow-400 to-amber-500 text-slate-900 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-yellow-400/40 disabled:opacity-40 disabled:cursor-not-allowed disabled:translate-y-0"
+                    onClick={onDeal}
+                    disabled={isSettlement ? !canRebet : !canDeal}
+                  >
+                    Deal
+                  </button>
+                </div>
+
+                {/* Chip selector - only during betting */}
+                {isBetting && (
                   <div className="flex justify-center gap-4">
                     {CHIP_VALUES.map((value) => {
                       const isSelected = selectedChip === value
@@ -323,82 +385,165 @@ export function TableLayout({
                             canAffordChip ? 'hover:scale-110 cursor-pointer' : 'opacity-40 cursor-not-allowed'
                           )}
                         >
-                          ${value}
+                          {value >= 1000 ? `$${value / 1000}k` : `$${value}`}
                         </button>
                       )
                     })}
                   </div>
-                </>
-              )}
-            </>
+                )}
+              </div>
+            </div>
           )}
 
           {/* Even money controls */}
           {isEvenMoney && (
-            <div className="text-center animate-state-enter">
-              <p className="text-lg mb-2">You have Blackjack! Take even money?</p>
-              <p className="text-yellow-400 mb-4">Guarantees 1:1 payout instead of risking a push</p>
-              <div className="flex gap-4 justify-center">
-                <button
-                  className="px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-gradient-to-br from-green-400 to-emerald-500 text-slate-900 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-green-400/40"
-                  onClick={onTakeEvenMoney}
-                >
-                  Take Even Money
-                </button>
-                <button
-                  className="px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-white/20 text-white hover:bg-white/30"
-                  onClick={onDeclineEvenMoney}
-                >
-                  No, Risk It
-                </button>
+            <div className="flex items-center justify-center gap-8 animate-state-enter">
+              {/* Bankroll stats on left */}
+              <div className="grid grid-cols-[auto_auto] gap-x-3 gap-y-1 text-sm font-semibold">
+                <span className="text-green-400 text-left">Bankroll:</span>
+                <span className="text-green-400 text-right">${bankroll}</span>
+                {lastWinAmount > 0 && (
+                  <>
+                    <span className="text-yellow-400 text-left">Last Win:</span>
+                    <span className="text-yellow-400 text-right">${lastWinAmount}</span>
+                  </>
+                )}
+                <span className={twMerge('text-left', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>P/L:</span>
+                <span className={twMerge('text-right', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>{lastWin > 0 ? '+' : ''}${lastWin}</span>
+              </div>
+
+              <div className="text-center">
+                <p className="text-lg mb-2">You have Blackjack! Take even money?</p>
+                <p className="text-yellow-400 mb-4">Guarantees 1:1 payout instead of risking a push</p>
+                <div className="flex gap-3 justify-center">
+                  <button
+                    className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-gradient-to-br from-green-400 to-emerald-500 text-slate-900 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-green-400/40"
+                    onClick={onTakeEvenMoney}
+                  >
+                    Take Even Money
+                  </button>
+                  <button
+                    className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-white/20 text-white hover:bg-white/30"
+                    onClick={onDeclineEvenMoney}
+                  >
+                    No, Risk It
+                  </button>
+                </div>
               </div>
             </div>
           )}
 
           {/* Insurance controls */}
           {isInsurance && (
-            <div className="text-center animate-state-enter">
-              <p className="text-lg mb-2">Dealer shows an Ace. Insurance?</p>
-              <p className="text-yellow-400 mb-4">Cost: ${insuranceCost}</p>
-              <div className="flex gap-4 justify-center">
-                <button
-                  className="px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-gradient-to-br from-yellow-400 to-amber-500 text-slate-900 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-yellow-400/40 disabled:opacity-40 disabled:cursor-not-allowed"
-                  onClick={onTakeInsurance}
-                  disabled={!canAffordInsurance}
-                >
-                  Take Insurance
-                </button>
-                <button
-                  className="px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-white/20 text-white hover:bg-white/30"
-                  onClick={onDeclineInsurance}
-                >
-                  No Insurance
-                </button>
+            <div className="flex items-center justify-center gap-8 animate-state-enter">
+              {/* Bankroll stats on left */}
+              <div className="grid grid-cols-[auto_auto] gap-x-3 gap-y-1 text-sm font-semibold">
+                <span className="text-green-400 text-left">Bankroll:</span>
+                <span className="text-green-400 text-right">${bankroll}</span>
+                {lastWinAmount > 0 && (
+                  <>
+                    <span className="text-yellow-400 text-left">Last Win:</span>
+                    <span className="text-yellow-400 text-right">${lastWinAmount}</span>
+                  </>
+                )}
+                <span className={twMerge('text-left', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>P/L:</span>
+                <span className={twMerge('text-right', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>{lastWin > 0 ? '+' : ''}${lastWin}</span>
+              </div>
+
+              <div className="text-center">
+                <p className="text-lg mb-2">Dealer shows an Ace. Insurance?</p>
+                <p className="text-yellow-400 mb-4">Cost: ${insuranceCost}</p>
+                <div className="flex gap-3 justify-center">
+                  <button
+                    className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-gradient-to-br from-yellow-400 to-amber-500 text-slate-900 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-yellow-400/40 disabled:opacity-40 disabled:cursor-not-allowed"
+                    onClick={onTakeInsurance}
+                    disabled={!canAffordInsurance}
+                  >
+                    Take Insurance
+                  </button>
+                  <button
+                    className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-white/20 text-white hover:bg-white/30"
+                    onClick={onDeclineInsurance}
+                  >
+                    No Insurance
+                  </button>
+                </div>
               </div>
             </div>
           )}
 
           {/* Player turn controls */}
           {isPlayerTurn && (
-            <div className="animate-state-enter">
-              <ActionButtons
-                canHit={canHit}
-                canStand={canStand}
-                canDouble={canDouble}
-                canSplit={canSplit}
-                canSurrender={canSurrender}
-                onHit={onHit}
-                onStand={onStand}
-                onDouble={onDouble}
-                onSplit={onSplit}
-                onSurrender={onSurrender}
-              />
+            <div className="flex items-center justify-center gap-8 animate-state-enter">
+              {/* Bankroll stats on left */}
+              <div className="grid grid-cols-[auto_auto] gap-x-3 gap-y-1 text-sm font-semibold">
+                <span className="text-green-400 text-left">Bankroll:</span>
+                <span className="text-green-400 text-right">${bankroll}</span>
+                {lastWinAmount > 0 && (
+                  <>
+                    <span className="text-yellow-400 text-left">Last Win:</span>
+                    <span className="text-yellow-400 text-right">${lastWinAmount}</span>
+                  </>
+                )}
+                <span className={twMerge('text-left', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>P/L:</span>
+                <span className={twMerge('text-right', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>{lastWin > 0 ? '+' : ''}${lastWin}</span>
+              </div>
+
+              {/* Action buttons or hit confirmation */}
+              {showHitConfirm ? (
+                <div className="flex flex-col items-center gap-3 animate-pop">
+                  <div className="text-yellow-400 font-bold text-lg">
+                    Are you sure you want to hit?
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-red-600 text-white hover:bg-red-500"
+                      onClick={onConfirmHit}
+                    >
+                      Yes, Hit
+                    </button>
+                    <button
+                      className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-green-600 text-white hover:bg-green-500"
+                      onClick={() => { onCancelHit(); onStand(); }}
+                    >
+                      No, Stand
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <ActionButtons
+                  canHit={canHit}
+                  canStand={canStand}
+                  canDouble={canDouble}
+                  canSplit={canSplit}
+                  canSurrender={canSurrender}
+                  onHit={onHit}
+                  onStand={onStand}
+                  onDouble={onDouble}
+                  onSplit={onSplit}
+                  onSurrender={onSurrender}
+                />
+              )}
             </div>
           )}
 
           {/* Dealer turn */}
           {isDealerTurn && (
-            <div className="text-center animate-state-enter">
+            <div className="flex items-center justify-center gap-8 animate-state-enter">
+              {/* Bankroll stats on left */}
+              <div className="grid grid-cols-[auto_auto] gap-x-3 gap-y-1 text-sm font-semibold">
+                <span className="text-green-400 text-left">Bankroll:</span>
+                <span className="text-green-400 text-right">${bankroll}</span>
+                {lastWinAmount > 0 && (
+                  <>
+                    <span className="text-yellow-400 text-left">Last Win:</span>
+                    <span className="text-yellow-400 text-right">${lastWinAmount}</span>
+                  </>
+                )}
+                <span className={twMerge('text-left', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>P/L:</span>
+                <span className={twMerge('text-right', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>{lastWin > 0 ? '+' : ''}${lastWin}</span>
+              </div>
+
               <div className="text-xl text-white/80 animate-pulse-subtle">
                 Dealer is playing...
               </div>
@@ -414,7 +559,8 @@ export function TableLayout({
 function ChipStack({ amount }: { amount: number }) {
   // Determine chip color based on amount
   let chipColor = chipColors[5]
-  if (amount >= 500) chipColor = chipColors[500]
+  if (amount >= 1000) chipColor = chipColors[1000]
+  else if (amount >= 500) chipColor = chipColors[500]
   else if (amount >= 100) chipColor = chipColors[100]
   else if (amount >= 25) chipColor = chipColors[25]
 
@@ -478,35 +624,6 @@ function calculateMainBetWin(spot: Spot): number {
   return totalWin
 }
 
-// Calculate total round win (main bets + side bets for all spots)
-function calculateTotalRoundWin(spots: Spot[]): number {
-  let total = 0
-
-  for (const spot of spots) {
-    if (spot.bet === 0) continue
-
-    // Main bet winnings
-    total += calculateMainBetWin(spot)
-
-    // Side bet winnings (profit only, not including original bet back)
-    if (spot.sideBets.twentyOnePlusThree > 0 && spot.sideBetResults.twentyOnePlusThree) {
-      const payout = SIDE_BET_PAYOUTS.twentyOnePlusThree[spot.sideBetResults.twentyOnePlusThree]
-      total += spot.sideBets.twentyOnePlusThree * (payout - 1) // payout includes original, so subtract 1 for profit
-    } else if (spot.sideBets.twentyOnePlusThree > 0) {
-      total -= spot.sideBets.twentyOnePlusThree // Lost side bet
-    }
-
-    if (spot.sideBets.perfectPairs > 0 && spot.sideBetResults.perfectPairs) {
-      const payout = SIDE_BET_PAYOUTS.perfectPairs[spot.sideBetResults.perfectPairs]
-      total += spot.sideBets.perfectPairs * (payout - 1)
-    } else if (spot.sideBets.perfectPairs > 0) {
-      total -= spot.sideBets.perfectPairs // Lost side bet
-    }
-  }
-
-  return total
-}
-
 // Betting circle component for side bets
 function BettingCircle({
   label,
@@ -535,7 +652,8 @@ function BettingCircle({
 
   // Determine chip color for display
   let chipColor = chipColors[5]
-  if (amount >= 500) chipColor = chipColors[500]
+  if (amount >= 1000) chipColor = chipColors[1000]
+  else if (amount >= 500) chipColor = chipColors[500]
   else if (amount >= 100) chipColor = chipColors[100]
   else if (amount >= 25) chipColor = chipColors[25]
 
@@ -553,17 +671,16 @@ function BettingCircle({
         className={twMerge(
           sizeClasses,
           'rounded-full border-2 transition-all flex flex-col items-center justify-center',
-          amount > 0 ? ['bg-gradient-to-br border-dashed', chipColor.bg, chipColor.border] : 'border-white/20 bg-black/30',
+          amount > 0 ? ['bg-linear-to-br border-dashed', chipColor.bg, chipColor.border] : 'border-white/20 bg-black/30',
           hasWin && 'ring-2 ring-green-400',
           isClickable ? 'hover:border-yellow-400 hover:bg-yellow-400/10 cursor-pointer hover:scale-110' : 'cursor-default',
           isLocked && amount === 0 && 'opacity-40'
         )}
       >
-        {amount > 0 ? (
-          <span className="text-white font-bold text-[10px]">${amount}</span>
-        ) : (
-          <span className="text-white/50 leading-none">{label}</span>
-        )}
+        {amount > 0
+          ? <span className="text-white font-bold text-[10px]">${amount}</span>
+          : <span className="text-white/50 leading-none">{label}</span>
+        }
       </button>
     </div>
   )

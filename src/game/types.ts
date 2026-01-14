@@ -90,12 +90,14 @@ export interface GameContext {
   insuranceBet: number          // Global - insurance on dealer showing ace
   message: string
   previousBets: PreviousBets | null  // Store last round's bets for rebet
+  lastWin: number               // Net profit/loss from the last completed round
+  lastWinAmount: number         // Total winnings from winning bets (including original stake)
 }
 
-export const CHIP_VALUES = [5, 25, 100, 500] as const
+export const CHIP_VALUES = [5, 25, 100, 500, 1000] as const
 export type ChipValue = (typeof CHIP_VALUES)[number]
 
-export const INITIAL_BANKROLL = 1000
+export const INITIAL_BANKROLL = 2500
 export const MIN_BET = 5
 export const DECK_COUNT = 6
 export const RESHUFFLE_THRESHOLD = 0.25 // Reshuffle when 25% cards remain

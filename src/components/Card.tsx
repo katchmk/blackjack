@@ -22,7 +22,7 @@ interface CardProps {
 }
 
 export function Card({ card, index = 0, animate = true }: CardProps) {
-  const delay = `${index * 150}ms`
+  const delay = `${index * 300}ms`
 
   if (!card.faceUp) {
     return (

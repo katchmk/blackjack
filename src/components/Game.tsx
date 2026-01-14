@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMachine } from '@xstate/react'
 import { blackjackMachine } from '../game/machine'
 import { TableLayout } from './TableLayout'
-import { canSplit, canDoubleDown, isBust, calculateHandValue } from '../game/scoring'
+import { canSplit, canDoubleDown, isBust, calculateHandValue, isHard17OrMore } from '../game/scoring'
 import type { SideBets, ChipValue } from '../game/types'
 import { MIN_BET } from '../game/types'
 
@@ -10,6 +10,7 @@ export function Game() {
   const [state, send] = useMachine(blackjackMachine)
   const { context } = state
   const [selectedChip, setSelectedChip] = useState<ChipValue>(25)
+  const [showHitConfirm, setShowHitConfirm] = useState(false)
 
   const isBetting = state.matches('betting')
   const isPlayerTurn = state.matches('playerTurn')
@@ -24,13 +25,32 @@ export function Game() {
   const currentHand = currentSpot?.hands[currentSpot.activeHandIndex]
 
   const canHitNow = isPlayerTurn && currentHand && !currentHand.isSplitAces && !isBust(currentHand.cards) && calculateHandValue(currentHand.cards) < 21
+  const isHard17Plus = currentHand ? isHard17OrMore(currentHand.cards) : false
+
+  const handleHit = () => {
+    if (isHard17Plus && !showHitConfirm) {
+      setShowHitConfirm(true)
+      return
+    }
+    setShowHitConfirm(false)
+    send({ type: 'HIT' })
+  }
+
+  const cancelHitConfirm = () => {
+    setShowHitConfirm(false)
+  }
   const canDoubleNow = isPlayerTurn && currentHand && canDoubleDown(currentHand.cards) && !currentHand.isSplitAces && context.bankroll >= currentHand.bet
   const canSplitNow = isPlayerTurn && currentHand && canSplit(currentHand.cards) && currentSpot.hands.length < 4 && context.bankroll >= currentHand.bet
   const canSurrenderNow = isPlayerTurn && currentHand && currentHand.cards.length === 2 && !currentHand.isSplit && currentSpot.activeHandIndex === 0
 
-  // Calculate total bets
+  // Calculate total bets (use hand.bet if hands exist to account for doubles/splits)
   const totalBets = context.spots.reduce(
-    (sum, s) => sum + s.bet + s.sideBets.twentyOnePlusThree + s.sideBets.perfectPairs,
+    (sum, s) => {
+      const mainBet = s.hands.length > 0
+        ? s.hands.reduce((handSum, h) => handSum + h.bet, 0)
+        : s.bet
+      return sum + mainBet + s.sideBets.twentyOnePlusThree + s.sideBets.perfectPairs
+    },
     0
   )
   const canDeal = context.spots.some((s) => s.bet >= MIN_BET)
@@ -45,6 +65,10 @@ export function Game() {
   // During betting: only allow rebet if no bets placed yet
   // During settlement: always allow rebet (current bets will be cleared)
   const canRebet = context.previousBets && previousBetsTotal > 0 && context.bankroll >= previousBetsTotal && (isSettlement || totalBets === 0)
+
+  // Double bet calculations (for betting phase)
+  const currentSpotBet = context.spots[context.bettingSpotIndex]?.bet ?? 0
+  const canDoubleBet = currentSpotBet > 0 && context.bankroll >= currentSpotBet
 
   // Insurance calculations
   const insuranceCost = context.spots.reduce((sum, s) => sum + s.bet, 0) / 2
@@ -80,14 +104,16 @@ export function Game() {
         showDealerValue={isDealerTurn || isSettlement}
         selectedChip={selectedChip}
         bankroll={context.bankroll}
+        lastWin={context.lastWin}
+        lastWinAmount={context.lastWinAmount}
         totalBets={totalBets}
         canDeal={canDeal}
         canRebet={!!canRebet}
         previousBetsTotal={previousBetsTotal}
-        message={context.message}
         onTakeEvenMoney={() => send({ type: 'TAKE_EVEN_MONEY' })}
         onDeclineEvenMoney={() => send({ type: 'DECLINE_EVEN_MONEY' })}
         insuranceCost={insuranceCost}
+        insuranceBet={context.insuranceBet}
         canAffordInsurance={canAffordInsurance}
         onTakeInsurance={() => send({ type: 'TAKE_INSURANCE' })}
         onDeclineInsurance={() => send({ type: 'DECLINE_INSURANCE' })}
@@ -96,13 +122,18 @@ export function Game() {
         canDouble={!!canDoubleNow}
         canSplit={!!canSplitNow}
         canSurrender={!!canSurrenderNow}
-        onHit={() => send({ type: 'HIT' })}
+        showHitConfirm={showHitConfirm}
+        onHit={handleHit}
+        onConfirmHit={() => { setShowHitConfirm(false); send({ type: 'HIT' }) }}
+        onCancelHit={cancelHitConfirm}
         onStand={() => send({ type: 'STAND' })}
         onDouble={() => send({ type: 'DOUBLE' })}
         onSplit={() => send({ type: 'SPLIT' })}
         onSurrender={() => send({ type: 'SURRENDER' })}
         onSelectChip={setSelectedChip}
         onPlaceBet={handlePlaceBet}
+        canDoubleBet={canDoubleBet}
+        onDoubleBet={() => send({ type: 'DOUBLE_BET' })}
         onClear={() => send({ type: isSettlement ? 'NEW_ROUND' : 'CLEAR_ALL_BETS' })}
         onRebet={() => send({ type: 'REBET' })}
         onDeal={() => send({ type: 'DEAL' })}

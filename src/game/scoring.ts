@@ -66,6 +66,27 @@ export function isBust(cards: Card[]): boolean {
   return calculateHandValue(cards) > 21
 }
 
+export function isHard17OrMore(cards: Card[]): boolean {
+  // Returns true if hand is hard 17+ (no ace counted as 11)
+  let value = 0
+  let aces = 0
+
+  for (const card of cards) {
+    if (!card.faceUp) continue
+    value += cardValue(card.rank)
+    if (card.rank === 'A') aces++
+  }
+
+  // Reduce aces until we're at or below 21
+  while (value > 21 && aces > 0) {
+    value -= 10
+    aces--
+  }
+
+  // Hard 17+ means value >= 17 and no aces counted as 11
+  return value >= 17 && aces === 0
+}
+
 export function getHandDisplayValue(cards: Card[]): string {
   // Returns display string for hand value, showing both values for soft hands
   // e.g., "8 / 18" for Ace + 7
