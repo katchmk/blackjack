@@ -18,6 +18,7 @@ export function Game() {
   const isInsurance = state.matches('insurance')
   const isSettlement = state.matches('settlement')
   const isDealerTurn = state.matches('dealerTurn')
+  const isPlayerBust = state.matches('bust')
   const isPlaying = isPlayerTurn || isDealerTurn || isInsurance || isEvenMoney
 
   // Get current spot and hand for player actions
@@ -110,6 +111,7 @@ export function Game() {
         canDeal={canDeal}
         canRebet={!!canRebet}
         previousBetsTotal={previousBetsTotal}
+        isBust={isPlayerBust}
         onTakeEvenMoney={() => send({ type: 'TAKE_EVEN_MONEY' })}
         onDeclineEvenMoney={() => send({ type: 'DECLINE_EVEN_MONEY' })}
         insuranceCost={insuranceCost}
@@ -137,6 +139,7 @@ export function Game() {
         onClear={() => send({ type: isSettlement ? 'NEW_ROUND' : 'CLEAR_ALL_BETS' })}
         onRebet={() => send({ type: 'REBET' })}
         onDeal={() => send({ type: 'DEAL' })}
+        onRestart={() => send({ type: 'RESTART' })}
       />
     </div>
   )

@@ -24,6 +24,7 @@ interface TableLayoutProps {
   canDeal: boolean
   canRebet: boolean
   previousBetsTotal: number
+  isBust: boolean
   // Even Money
   onTakeEvenMoney: () => void
   onDeclineEvenMoney: () => void
@@ -55,6 +56,7 @@ interface TableLayoutProps {
   onClear: () => void
   onRebet: () => void
   onDeal: () => void
+  onRestart: () => void
 }
 
 const chipColors: Record<ChipValue, { bg: string; border: string }> = {
@@ -85,6 +87,7 @@ export function TableLayout({
   canDeal,
   canRebet,
   previousBetsTotal,
+  isBust,
   onTakeEvenMoney,
   onDeclineEvenMoney,
   insuranceCost,
@@ -112,6 +115,7 @@ export function TableLayout({
   onClear,
   onRebet,
   onDeal,
+  onRestart,
 }: TableLayoutProps) {
   const canAfford = bankroll >= selectedChip
 
@@ -164,6 +168,31 @@ export function TableLayout({
         <div className="text-center text-white/40 text-xs tracking-wider">
           Insurance pays 2 to 1
         </div>
+
+        {/* Chip selector - between dealer and betting spots during betting */}
+        {isBetting && (
+          <div className="flex justify-center gap-4 py-4">
+            {CHIP_VALUES.map((value) => {
+              const isSelected = selectedChip === value
+              const canAffordChip = bankroll >= value
+              return (
+                <button
+                  key={value}
+                  onClick={() => onSelectChip(value)}
+                  disabled={!canAffordChip}
+                  className={twMerge(
+                    'w-14 h-14 rounded-full border-4 border-dashed bg-gradient-to-br text-white font-bold text-sm transition-all shadow-lg',
+                    chipColors[value].bg,
+                    isSelected && 'scale-125 ring-4 ring-yellow-400 ring-offset-2 ring-offset-emerald-800',
+                    canAffordChip ? 'hover:scale-110 cursor-pointer' : 'opacity-40 cursor-not-allowed'
+                  )}
+                >
+                  {value >= 1000 ? `$${value / 1000}k` : `$${value}`}
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         {/* Player hands area - always visible to prevent layout jump */}
         <div className="h-44 flex justify-center items-end gap-4 my-6">
@@ -331,66 +360,38 @@ export function TableLayout({
                 <span className="text-green-400 text-right">${bankroll}</span>
               </div>
 
-              {/* Betting buttons and chips */}
-              <div className="flex flex-col items-center gap-4">
-                {/* Clear / Rebet / Deal buttons */}
-                <div className="flex justify-center gap-3">
-                  <button
-                    className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-white/20 text-white hover:bg-white/30 disabled:opacity-40 disabled:cursor-not-allowed"
-                    onClick={onClear}
-                    disabled={isSettlement ? false : totalBets === 0}
-                  >
-                    Clear
-                  </button>
-                  {isBetting && (
-                    <button
-                      className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-yellow-600 text-white hover:bg-yellow-500 disabled:opacity-40 disabled:cursor-not-allowed"
-                      onClick={onDoubleBet}
-                      disabled={!canDoubleBet}
-                    >
-                      2x
-                    </button>
-                  )}
-                  <button
-                    className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
-                    onClick={onRebet}
-                    disabled={!canRebet}
-                  >
-                    Rebet {previousBetsTotal > 0 && <span className="text-blue-200">${previousBetsTotal}</span>}
-                  </button>
-                  <button
-                    className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-gradient-to-br from-yellow-400 to-amber-500 text-slate-900 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-yellow-400/40 disabled:opacity-40 disabled:cursor-not-allowed disabled:translate-y-0"
-                    onClick={onDeal}
-                    disabled={isSettlement ? !canRebet : !canDeal}
-                  >
-                    Deal
-                  </button>
-                </div>
-
-                {/* Chip selector - only during betting */}
+              {/* Betting buttons */}
+              <div className="flex justify-center gap-3">
+                <button
+                  className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-white/20 text-white hover:bg-white/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                  onClick={onClear}
+                  disabled={isSettlement ? false : totalBets === 0}
+                >
+                  Clear
+                </button>
                 {isBetting && (
-                  <div className="flex justify-center gap-4">
-                    {CHIP_VALUES.map((value) => {
-                      const isSelected = selectedChip === value
-                      const canAffordChip = bankroll >= value
-                      return (
-                        <button
-                          key={value}
-                          onClick={() => onSelectChip(value)}
-                          disabled={!canAffordChip}
-                          className={twMerge(
-                            'w-14 h-14 rounded-full border-4 border-dashed bg-gradient-to-br text-white font-bold text-sm transition-all shadow-lg',
-                            chipColors[value].bg,
-                            isSelected && 'scale-125 ring-4 ring-yellow-400 ring-offset-2 ring-offset-emerald-800',
-                            canAffordChip ? 'hover:scale-110 cursor-pointer' : 'opacity-40 cursor-not-allowed'
-                          )}
-                        >
-                          {value >= 1000 ? `$${value / 1000}k` : `$${value}`}
-                        </button>
-                      )
-                    })}
-                  </div>
+                  <button
+                    className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-yellow-600 text-white hover:bg-yellow-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                    onClick={onDoubleBet}
+                    disabled={!canDoubleBet}
+                  >
+                    2x
+                  </button>
                 )}
+                <button
+                  className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                  onClick={onRebet}
+                  disabled={!canRebet}
+                >
+                  Rebet {previousBetsTotal > 0 && <span className="text-blue-200">${previousBetsTotal}</span>}
+                </button>
+                <button
+                  className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-gradient-to-br from-yellow-400 to-amber-500 text-slate-900 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-yellow-400/40 disabled:opacity-40 disabled:cursor-not-allowed disabled:translate-y-0"
+                  onClick={onDeal}
+                  disabled={isSettlement ? !canRebet : !canDeal}
+                >
+                  Deal
+                </button>
               </div>
             </div>
           )}
@@ -551,6 +552,22 @@ export function TableLayout({
           )}
         </div>
       </div>
+
+      {/* Bust overlay */}
+      {isBust && (
+        <div className="absolute inset-0 bg-black/80 rounded-t-[200px] flex items-center justify-center z-50">
+          <div className="text-center animate-pop">
+            <div className="text-6xl font-bold text-red-500 mb-4">BUST!</div>
+            <div className="text-xl text-white/80 mb-8">You've run out of chips</div>
+            <button
+              onClick={onRestart}
+              className="px-8 py-4 text-xl font-bold rounded-lg bg-gradient-to-br from-yellow-400 to-amber-500 text-slate-900 hover:-translate-y-1 hover:shadow-lg hover:shadow-yellow-400/40 transition-all"
+            >
+              Play Again
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -35,6 +35,7 @@ type GameEvent =
   | { type: 'SPLIT' }
   | { type: 'SURRENDER' }
   | { type: 'NEW_ROUND' }
+  | { type: 'RESTART' }
 
 function createEmptySideBets(): SideBets {
   return {
@@ -838,6 +839,10 @@ export const blackjackMachine = setup({
           guard: 'hasAnyBet',
           target: 'dealing',
         },
+        RESTART: {
+          target: 'betting',
+          actions: assign(() => createInitialContext()),
+        },
       },
     },
     dealing: {
@@ -849,9 +854,17 @@ export const blackjackMachine = setup({
             context.dealerHand[0]?.rank === 'A' && anyPlayerHasBlackjack(context.spots),
           target: 'evenMoney',
         },
+        // Only offer insurance if player can afford it
+        {
+          guard: ({ context }) =>
+            context.dealerHand[0]?.rank === 'A' &&
+            context.bankroll >= context.spots.reduce((sum, s) => sum + s.bet, 0) / 2,
+          target: 'insurance',
+        },
+        // Dealer shows ace but can't afford insurance - skip to check blackjacks
         {
           guard: 'dealerShowsAce',
-          target: 'insurance',
+          target: 'checkBlackjacks',
         },
         {
           target: 'playerTurn',
@@ -870,6 +883,12 @@ export const blackjackMachine = setup({
             guard: 'allActiveSpotsHaveBlackjack',
             target: 'checkBlackjacks',
           },
+          // Skip insurance if player can't afford it
+          {
+            guard: ({ context }) =>
+              context.bankroll < context.spots.reduce((sum, s) => sum + s.bet, 0) / 2,
+            target: 'checkBlackjacks',
+          },
           // Otherwise, offer insurance for non-blackjack hands
           {
             target: 'insurance',
@@ -882,6 +901,12 @@ export const blackjackMachine = setup({
         // If all spots are now settled, skip insurance
         {
           guard: 'allSpotsSettled',
+          target: 'checkBlackjacks',
+        },
+        // Skip insurance if player can't afford it
+        {
+          guard: ({ context }) =>
+            context.bankroll < context.spots.reduce((sum, s) => sum + s.bet, 0) / 2,
           target: 'checkBlackjacks',
         },
         // Otherwise, offer insurance for remaining hands
@@ -1105,6 +1130,13 @@ export const blackjackMachine = setup({
     },
     settlement: {
       entry: 'settleAllSpots',
+      always: [
+        // Check if player is bust after settlement
+        {
+          guard: ({ context }) => context.bankroll < MIN_BET,
+          target: 'bust',
+        },
+      ],
       on: {
         NEW_ROUND: {
           target: 'betting',
@@ -1163,6 +1195,18 @@ export const blackjackMachine = setup({
               bankroll: context.bankroll - totalNeeded,
             }
           }),
+        },
+        RESTART: {
+          target: 'betting',
+          actions: assign(() => createInitialContext()),
+        },
+      },
+    },
+    bust: {
+      on: {
+        RESTART: {
+          target: 'betting',
+          actions: assign(() => createInitialContext()),
         },
       },
     },
