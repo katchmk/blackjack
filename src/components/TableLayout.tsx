@@ -1,63 +1,10 @@
+import { useState } from 'react'
 import { twMerge } from 'tailwind-merge'
 import { Hand } from './Hand'
 import { ActionButtons } from './ActionButtons'
-import type { Spot, Card, SideBets, ChipValue, TwentyOnePlusThreeResult, PerfectPairsResult } from '../game/types'
+import type { Spot, ChipValue, TwentyOnePlusThreeResult, PerfectPairsResult, SideBets } from '../game/types'
 import { CHIP_VALUES, SIDE_BET_PAYOUTS } from '../game/types'
-
-interface TableLayoutProps {
-  spots: Spot[]
-  activeSpotIndex: number
-  dealerHand: Card[]
-  isPlaying: boolean
-  isBetting: boolean
-  isSettlement: boolean
-  isEvenMoney: boolean
-  isInsurance: boolean
-  isPlayerTurn: boolean
-  isDealerTurn: boolean
-  showDealerValue: boolean
-  selectedChip: ChipValue
-  bankroll: number
-  lastWin: number
-  lastWinAmount: number
-  totalBets: number
-  canDeal: boolean
-  canRebet: boolean
-  previousBetsTotal: number
-  isBust: boolean
-  // Even Money
-  onTakeEvenMoney: () => void
-  onDeclineEvenMoney: () => void
-  // Insurance
-  insuranceCost: number
-  insuranceBet: number
-  canAffordInsurance: boolean
-  onTakeInsurance: () => void
-  onDeclineInsurance: () => void
-  // Player actions
-  canHit: boolean
-  canStand: boolean
-  canDouble: boolean
-  canSplit: boolean
-  canSurrender: boolean
-  showHitConfirm: boolean
-  onHit: () => void
-  onConfirmHit: () => void
-  onCancelHit: () => void
-  onStand: () => void
-  onDouble: () => void
-  onSplit: () => void
-  onSurrender: () => void
-  // Betting
-  onSelectChip: (chip: ChipValue) => void
-  onPlaceBet: (spotIndex: number, betType: 'main' | keyof SideBets) => void
-  canDoubleBet: boolean
-  onDoubleBet: () => void
-  onClear: () => void
-  onRebet: () => void
-  onDeal: () => void
-  onRestart: () => void
-}
+import { GameContext, selectTableState, selectBankrollStats, shallowEqual } from '../game/context'
 
 const chipColors: Record<ChipValue, { bg: string; border: string }> = {
   5: { bg: 'from-red-500 to-red-700', border: 'border-red-400' },
@@ -67,57 +14,65 @@ const chipColors: Record<ChipValue, { bg: string; border: string }> = {
   1000: { bg: 'from-orange-500 to-orange-700', border: 'border-orange-400' },
 }
 
-export function TableLayout({
-  spots,
-  activeSpotIndex,
-  dealerHand,
-  isPlaying,
-  isBetting,
-  isSettlement,
-  isEvenMoney,
-  isInsurance,
-  isPlayerTurn,
-  isDealerTurn,
-  showDealerValue,
-  selectedChip,
-  bankroll,
-  lastWin,
-  lastWinAmount,
-  totalBets,
-  canDeal,
-  canRebet,
-  previousBetsTotal,
-  isBust,
-  onTakeEvenMoney,
-  onDeclineEvenMoney,
-  insuranceCost,
-  insuranceBet,
-  canAffordInsurance,
-  onTakeInsurance,
-  onDeclineInsurance,
-  canHit,
-  canStand,
-  canDouble,
-  canSplit,
-  canSurrender,
-  showHitConfirm,
-  onHit,
-  onConfirmHit,
-  onCancelHit,
-  onStand,
-  onDouble,
-  onSplit,
-  onSurrender,
-  onSelectChip,
-  onPlaceBet,
-  canDoubleBet,
-  onDoubleBet,
-  onClear,
-  onRebet,
-  onDeal,
-  onRestart,
-}: TableLayoutProps) {
+function BankrollStats({ showTotalBets = false }: { showTotalBets?: boolean }) {
+  const { bankroll, lastWin, lastWinAmount, totalBets } = GameContext.useSelector(selectBankrollStats, shallowEqual)
+
+  return (
+    <div className="grid grid-cols-[auto_auto] gap-x-3 gap-y-1 text-sm font-semibold">
+      {showTotalBets && totalBets > 0 && (
+        <>
+          <span className="text-yellow-400 text-left">Total Bets:</span>
+          <span className="text-yellow-400 text-right">${totalBets}</span>
+        </>
+      )}
+      {lastWinAmount > 0 && (
+        <>
+          <span className="text-yellow-400 text-left">Last Win:</span>
+          <span className="text-yellow-400 text-right">${lastWinAmount}</span>
+        </>
+      )}
+      <span className={twMerge('text-left', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>P/L:</span>
+      <span className={twMerge('text-right', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>{lastWin > 0 ? '+' : ''}${lastWin}</span>
+      <span className="text-green-400 text-left">Bankroll:</span>
+      <span className="text-green-400 text-right">${bankroll}</span>
+    </div>
+  )
+}
+
+export function TableLayout() {
+  const actorRef = GameContext.useActorRef()
+  const {
+    spots, activeSpotIndex, dealerHand, bankroll, insuranceBet,
+    isBetting, isPlayerTurn, isEvenMoney, isInsurance, isSettlement,
+    isDealerTurn, isPlayerBust, isPlaying, showDealerValue,
+    totalBets, canDeal, canRebet, previousBetsTotal, canDoubleBet,
+    insuranceCost, canAffordInsurance, canHit, canDouble, canSplit,
+    canSurrender, isHard17Plus,
+  } = GameContext.useSelector(selectTableState, shallowEqual)
+
+  const [selectedChip, setSelectedChip] = useState<ChipValue>(25)
+  const [showHitConfirm, setShowHitConfirm] = useState(false)
+
   const canAfford = bankroll >= selectedChip
+
+  const handlePlaceBet = (spotIndex: number, betType: 'main' | keyof SideBets) => {
+    if (bankroll < selectedChip) return
+    actorRef.send({ type: 'SELECT_SPOT', spotIndex })
+    if (betType === 'main') {
+      actorRef.send({ type: 'ADD_BET', amount: selectedChip })
+    } else {
+      actorRef.send({ type: 'ADD_SIDE_BET', betType, amount: selectedChip })
+    }
+  }
+
+  const handleHit = () => {
+    if (isHard17Plus && !showHitConfirm) {
+      setShowHitConfirm(true)
+      return
+    }
+    setShowHitConfirm(false)
+    actorRef.send({ type: 'HIT' })
+  }
 
   return (
     <div className="relative w-full">
@@ -178,7 +133,7 @@ export function TableLayout({
               return (
                 <button
                   key={value}
-                  onClick={() => onSelectChip(value)}
+                  onClick={() => setSelectedChip(value)}
                   disabled={!canAffordChip}
                   className={twMerge(
                     'w-14 h-14 rounded-full border-4 border-dashed bg-gradient-to-br text-white font-bold text-sm transition-all shadow-lg',
@@ -251,7 +206,6 @@ export function TableLayout({
                 >
                   {/* Side bet circles - only clickable if main bet exists */}
                   <div className="flex gap-2 mb-2">
-                    {/* 21+3 circle */}
                     <BettingCircle
                       label="21+3"
                       amount={spot.sideBets.twentyOnePlusThree}
@@ -260,9 +214,8 @@ export function TableLayout({
                       betType="twentyOnePlusThree"
                       isClickable={isBetting && canAfford && hasBet}
                       isLocked={isBetting && !hasBet}
-                      onClick={() => onPlaceBet(index, 'twentyOnePlusThree')}
+                      onClick={() => handlePlaceBet(index, 'twentyOnePlusThree')}
                     />
-                    {/* Perfect Pairs circle */}
                     <BettingCircle
                       label="PP"
                       amount={spot.sideBets.perfectPairs}
@@ -271,7 +224,7 @@ export function TableLayout({
                       betType="perfectPairs"
                       isClickable={isBetting && canAfford && hasBet}
                       isLocked={isBetting && !hasBet}
-                      onClick={() => onPlaceBet(index, 'perfectPairs')}
+                      onClick={() => handlePlaceBet(index, 'perfectPairs')}
                     />
                   </div>
 
@@ -282,7 +235,7 @@ export function TableLayout({
                     return (
                       <div className="relative">
                         <button
-                          onClick={() => isBetting && canAfford && onPlaceBet(index, 'main')}
+                          onClick={() => isBetting && canAfford && handlePlaceBet(index, 'main')}
                           disabled={!isBetting || !canAfford}
                           className={twMerge(
                             'relative w-20 h-20 rounded-full border-4 transition-all flex flex-col items-center justify-center',
@@ -293,22 +246,18 @@ export function TableLayout({
                             (!isBetting || !canAfford) && 'cursor-default'
                           )}
                         >
-                          {/* Spot number */}
                           <span className="absolute -top-6 text-xs text-white/50">{index + 1}</span>
-
                           {hasBet ? (
                             <ChipStack amount={spot.hands.length > 0 ? spot.hands.reduce((sum, h) => sum + h.bet, 0) : spot.bet} />
                           ) : (
                             <span className="text-white/40 text-xs">BET</span>
                           )}
-                          {/* Doubled indicator */}
                           {spot.hands.some(h => h.isDoubled) && (
                             <span className="absolute -right-2 -top-2 bg-yellow-500 text-black text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-lg">
                               2x
                             </span>
                           )}
                         </button>
-                        {/* Win/Loss amount display */}
                         {hasResult && mainBetWin !== 0 && (
                           <div className={twMerge(
                             'absolute -bottom-6 left-1/2 -translate-x-1/2 text-[11px] font-bold px-2 py-0.5 rounded animate-pop whitespace-nowrap z-10',
@@ -340,31 +289,11 @@ export function TableLayout({
           {/* Betting controls */}
           {(isBetting || isSettlement) && (
             <div className="flex items-center justify-center gap-8">
-              {/* Bankroll stats on left */}
-              <div className="grid grid-cols-[auto_auto] gap-x-3 gap-y-1 text-sm font-semibold">
-                {totalBets > 0 && (
-                  <>
-                    <span className="text-yellow-400 text-left">Total Bets:</span>
-                    <span className="text-yellow-400 text-right">${totalBets}</span>
-                  </>
-                )}
-                {lastWinAmount > 0 && (
-                  <>
-                    <span className="text-yellow-400 text-left">Last Win:</span>
-                    <span className="text-yellow-400 text-right">${lastWinAmount}</span>
-                  </>
-                )}
-                <span className={twMerge('text-left', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>P/L:</span>
-                <span className={twMerge('text-right', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>{lastWin > 0 ? '+' : ''}${lastWin}</span>
-                <span className="text-green-400 text-left">Bankroll:</span>
-                <span className="text-green-400 text-right">${bankroll}</span>
-              </div>
-
-              {/* Betting buttons */}
+              <BankrollStats showTotalBets />
               <div className="flex justify-center gap-3">
                 <button
                   className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-white/20 text-white hover:bg-white/30 disabled:opacity-40 disabled:cursor-not-allowed"
-                  onClick={onClear}
+                  onClick={() => actorRef.send({ type: isSettlement ? 'NEW_ROUND' : 'CLEAR_ALL_BETS' })}
                   disabled={isSettlement ? false : totalBets === 0}
                 >
                   Clear
@@ -372,7 +301,7 @@ export function TableLayout({
                 {isBetting && (
                   <button
                     className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-yellow-600 text-white hover:bg-yellow-500 disabled:opacity-40 disabled:cursor-not-allowed"
-                    onClick={onDoubleBet}
+                    onClick={() => actorRef.send({ type: 'DOUBLE_BET' })}
                     disabled={!canDoubleBet}
                   >
                     2x
@@ -380,14 +309,14 @@ export function TableLayout({
                 )}
                 <button
                   className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
-                  onClick={onRebet}
+                  onClick={() => actorRef.send({ type: 'REBET' })}
                   disabled={!canRebet}
                 >
                   Rebet {previousBetsTotal > 0 && <span className="text-blue-200">${previousBetsTotal}</span>}
                 </button>
                 <button
                   className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-gradient-to-br from-yellow-400 to-amber-500 text-slate-900 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-yellow-400/40 disabled:opacity-40 disabled:cursor-not-allowed disabled:translate-y-0"
-                  onClick={onDeal}
+                  onClick={() => actorRef.send({ type: 'DEAL' })}
                   disabled={isSettlement ? !canRebet : !canDeal}
                 >
                   Deal
@@ -399,33 +328,20 @@ export function TableLayout({
           {/* Even money controls */}
           {isEvenMoney && (
             <div className="flex items-center justify-center gap-8 animate-state-enter">
-              {/* Bankroll stats on left */}
-              <div className="grid grid-cols-[auto_auto] gap-x-3 gap-y-1 text-sm font-semibold">
-                <span className="text-green-400 text-left">Bankroll:</span>
-                <span className="text-green-400 text-right">${bankroll}</span>
-                {lastWinAmount > 0 && (
-                  <>
-                    <span className="text-yellow-400 text-left">Last Win:</span>
-                    <span className="text-yellow-400 text-right">${lastWinAmount}</span>
-                  </>
-                )}
-                <span className={twMerge('text-left', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>P/L:</span>
-                <span className={twMerge('text-right', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>{lastWin > 0 ? '+' : ''}${lastWin}</span>
-              </div>
-
+              <BankrollStats />
               <div className="text-center">
                 <p className="text-lg mb-2">You have Blackjack! Take even money?</p>
                 <p className="text-yellow-400 mb-4">Guarantees 1:1 payout instead of risking a push</p>
                 <div className="flex gap-3 justify-center">
                   <button
                     className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-gradient-to-br from-green-400 to-emerald-500 text-slate-900 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-green-400/40"
-                    onClick={onTakeEvenMoney}
+                    onClick={() => actorRef.send({ type: 'TAKE_EVEN_MONEY' })}
                   >
                     Take Even Money
                   </button>
                   <button
                     className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-white/20 text-white hover:bg-white/30"
-                    onClick={onDeclineEvenMoney}
+                    onClick={() => actorRef.send({ type: 'DECLINE_EVEN_MONEY' })}
                   >
                     No, Risk It
                   </button>
@@ -437,34 +353,21 @@ export function TableLayout({
           {/* Insurance controls */}
           {isInsurance && (
             <div className="flex items-center justify-center gap-8 animate-state-enter">
-              {/* Bankroll stats on left */}
-              <div className="grid grid-cols-[auto_auto] gap-x-3 gap-y-1 text-sm font-semibold">
-                <span className="text-green-400 text-left">Bankroll:</span>
-                <span className="text-green-400 text-right">${bankroll}</span>
-                {lastWinAmount > 0 && (
-                  <>
-                    <span className="text-yellow-400 text-left">Last Win:</span>
-                    <span className="text-yellow-400 text-right">${lastWinAmount}</span>
-                  </>
-                )}
-                <span className={twMerge('text-left', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>P/L:</span>
-                <span className={twMerge('text-right', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>{lastWin > 0 ? '+' : ''}${lastWin}</span>
-              </div>
-
+              <BankrollStats />
               <div className="text-center">
                 <p className="text-lg mb-2">Dealer shows an Ace. Insurance?</p>
                 <p className="text-yellow-400 mb-4">Cost: ${insuranceCost}</p>
                 <div className="flex gap-3 justify-center">
                   <button
                     className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-gradient-to-br from-yellow-400 to-amber-500 text-slate-900 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-yellow-400/40 disabled:opacity-40 disabled:cursor-not-allowed"
-                    onClick={onTakeInsurance}
+                    onClick={() => actorRef.send({ type: 'TAKE_INSURANCE' })}
                     disabled={!canAffordInsurance}
                   >
                     Take Insurance
                   </button>
                   <button
                     className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-white/20 text-white hover:bg-white/30"
-                    onClick={onDeclineInsurance}
+                    onClick={() => actorRef.send({ type: 'DECLINE_INSURANCE' })}
                   >
                     No Insurance
                   </button>
@@ -476,21 +379,7 @@ export function TableLayout({
           {/* Player turn controls */}
           {isPlayerTurn && (
             <div className="flex items-center justify-center gap-8 animate-state-enter">
-              {/* Bankroll stats on left */}
-              <div className="grid grid-cols-[auto_auto] gap-x-3 gap-y-1 text-sm font-semibold">
-                <span className="text-green-400 text-left">Bankroll:</span>
-                <span className="text-green-400 text-right">${bankroll}</span>
-                {lastWinAmount > 0 && (
-                  <>
-                    <span className="text-yellow-400 text-left">Last Win:</span>
-                    <span className="text-yellow-400 text-right">${lastWinAmount}</span>
-                  </>
-                )}
-                <span className={twMerge('text-left', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>P/L:</span>
-                <span className={twMerge('text-right', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>{lastWin > 0 ? '+' : ''}${lastWin}</span>
-              </div>
-
-              {/* Action buttons or hit confirmation */}
+              <BankrollStats />
               {showHitConfirm ? (
                 <div className="flex flex-col items-center gap-3 animate-pop">
                   <div className="text-yellow-400 font-bold text-lg">
@@ -499,13 +388,13 @@ export function TableLayout({
                   <div className="flex gap-3">
                     <button
                       className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-red-600 text-white hover:bg-red-500"
-                      onClick={onConfirmHit}
+                      onClick={() => { setShowHitConfirm(false); actorRef.send({ type: 'HIT' }) }}
                     >
                       Yes, Hit
                     </button>
                     <button
                       className="min-w-24 px-6 py-3 text-base font-bold border-none rounded-lg cursor-pointer transition-all bg-green-600 text-white hover:bg-green-500"
-                      onClick={() => { onCancelHit(); onStand(); }}
+                      onClick={() => { setShowHitConfirm(false); actorRef.send({ type: 'STAND' }) }}
                     >
                       No, Stand
                     </button>
@@ -514,15 +403,15 @@ export function TableLayout({
               ) : (
                 <ActionButtons
                   canHit={canHit}
-                  canStand={canStand}
+                  canStand={isPlayerTurn}
                   canDouble={canDouble}
                   canSplit={canSplit}
                   canSurrender={canSurrender}
-                  onHit={onHit}
-                  onStand={onStand}
-                  onDouble={onDouble}
-                  onSplit={onSplit}
-                  onSurrender={onSurrender}
+                  onHit={handleHit}
+                  onStand={() => actorRef.send({ type: 'STAND' })}
+                  onDouble={() => actorRef.send({ type: 'DOUBLE' })}
+                  onSplit={() => actorRef.send({ type: 'SPLIT' })}
+                  onSurrender={() => actorRef.send({ type: 'SURRENDER' })}
                 />
               )}
             </div>
@@ -531,20 +420,7 @@ export function TableLayout({
           {/* Dealer turn */}
           {isDealerTurn && (
             <div className="flex items-center justify-center gap-8 animate-state-enter">
-              {/* Bankroll stats on left */}
-              <div className="grid grid-cols-[auto_auto] gap-x-3 gap-y-1 text-sm font-semibold">
-                <span className="text-green-400 text-left">Bankroll:</span>
-                <span className="text-green-400 text-right">${bankroll}</span>
-                {lastWinAmount > 0 && (
-                  <>
-                    <span className="text-yellow-400 text-left">Last Win:</span>
-                    <span className="text-yellow-400 text-right">${lastWinAmount}</span>
-                  </>
-                )}
-                <span className={twMerge('text-left', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>P/L:</span>
-                <span className={twMerge('text-right', lastWin > 0 ? 'text-green-400' : lastWin < 0 ? 'text-red-400' : 'text-white/70')}>{lastWin > 0 ? '+' : ''}${lastWin}</span>
-              </div>
-
+              <BankrollStats />
               <div className="text-xl text-white/80 animate-pulse-subtle">
                 Dealer is playing...
               </div>
@@ -554,13 +430,13 @@ export function TableLayout({
       </div>
 
       {/* Bust overlay */}
-      {isBust && (
+      {isPlayerBust && (
         <div className="absolute inset-0 bg-black/80 rounded-t-[200px] flex items-center justify-center z-50">
           <div className="text-center animate-pop">
             <div className="text-6xl font-bold text-red-500 mb-4">BUST!</div>
             <div className="text-xl text-white/80 mb-8">You've run out of chips</div>
             <button
-              onClick={onRestart}
+              onClick={() => actorRef.send({ type: 'RESTART' })}
               className="px-8 py-4 text-xl font-bold rounded-lg bg-gradient-to-br from-yellow-400 to-amber-500 text-slate-900 hover:-translate-y-1 hover:shadow-lg hover:shadow-yellow-400/40 transition-all"
             >
               Play Again
@@ -574,7 +450,6 @@ export function TableLayout({
 
 // Chip stack visualization
 function ChipStack({ amount }: { amount: number }) {
-  // Determine chip color based on amount
   let chipColor = chipColors[5]
   if (amount >= 1000) chipColor = chipColors[1000]
   else if (amount >= 500) chipColor = chipColors[500]
@@ -621,19 +496,18 @@ function calculateMainBetWin(spot: Spot): number {
 
     switch (hand.result) {
       case 'blackjack':
-        totalWin += hand.bet * 1.5 // Profit is 1.5x bet (pays 3:2)
+        totalWin += hand.bet * 1.5
         break
       case 'win':
-        totalWin += hand.bet // Profit is 1x bet (pays 1:1)
+        totalWin += hand.bet
         break
       case 'push':
-        // No profit, bet returned
         break
       case 'lose':
-        totalWin -= hand.bet // Lost the bet
+        totalWin -= hand.bet
         break
       case 'surrender':
-        totalWin -= hand.bet / 2 // Lost half the bet
+        totalWin -= hand.bet / 2
         break
     }
   }
@@ -664,10 +538,8 @@ function BettingCircle({
   const sizeClasses = size === 'sm' ? 'w-11 h-11 text-[9px]' : 'w-14 h-14 text-xs'
   const hasWin = result !== null && result !== undefined
 
-  // Calculate win amount
   const winAmount = betType && result ? calculateSideBetWin(betType, amount, result) : 0
 
-  // Determine chip color for display
   let chipColor = chipColors[5]
   if (amount >= 1000) chipColor = chipColors[1000]
   else if (amount >= 500) chipColor = chipColors[500]
@@ -676,7 +548,6 @@ function BettingCircle({
 
   return (
     <div className="relative">
-      {/* Win amount display */}
       {hasWin && winAmount > 0 && (
         <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-green-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded animate-pop whitespace-nowrap z-10">
           +${winAmount}
